@@ -3,67 +3,76 @@ import Folder from "../Folder/Forlder";
 import File from "../File/File";
 
 class MyBrowser extends Component {
-    state = {
-        expandedFolders: [],
-        searchTerm: '',
+    constructor(props) {
+        super(props);
+        this.state = {
+            rootFolders: [],
+            expandedFolders: new Set(props.expandedFolders),
+            searchTerm: '',
+            searchResults: []
+        };
+    }
+
+    componentDidMount() {
+        const { initialData } = this.props;
+        const rootFolders = initialData.map((folderData) => this.buildFolder(folderData));
+        this.setState({ rootFolders });
+    }
+
+    buildFolder(folderData) {
+        const { name, children } = folderData;
+
+        return (
+            <Folder key={name} name={name} collapsed={!this.state.expandedFolders.has(name)}>
+                {children.map((child) => {
+                    if (child.type === 'file') return <File key={child.name} name={child.name} />;
+                    else return this.buildFolder(child);
+                })}
+            </Folder>
+        );
+    }
+
+    handleSearch = ({ target: { value } }) => {
+        const { rootFolders } = this.state;
+        const searchResults = [];
+        rootFolders.forEach((folder) => this.findInFolder(folder, value, searchResults));
+        this.setState({ searchTerm: value, searchResults });
     };
 
-    handleToggleFolder = folderName => {
-        this.setState(prevState => ({
-            expandedFolders: prevState.expandedFolders.includes(folderName) ?
-                prevState.expandedFolders.filter(name => name !== folderName) :
-                [...prevState.expandedFolders, folderName]
-        }));
-    };
+    findInFolder(folder, searchTerm, searchResults) {
+        const {
+            props: { name, children }
+        } = folder;
 
-    handleSearch = searchTerm => {
-        this.setState({ searchTerm });
-    };
+        if (name.toLowerCase().includes(searchTerm.toLowerCase())) {
+            searchResults.push(folder);
+        }
+        React.Children.forEach(children, (child) => {
+            if (child.type === Folder) {
+                this.findInFolder(child, searchTerm, searchResults);
+            } else if (child.type === File && child.props.name.toLowerCase().includes(searchTerm.toLowerCase())) {
+                searchResults.push({
+                    ...folder,
+                    props: {
+                        ...folder.props,
+                        children: folder.props.children.filter(({ type }) => type === File)
+                    }
+                });
+            }
+        });
+    }
 
     render() {
-        const { data } = this.props;
-        const { expandedFolders, searchTerm } = this.state;
+        const { rootFolders, searchTerm, searchResults } = this.state;
+        const foldersToRender = searchTerm ? searchResults : rootFolders;
 
         return (
             <div>
-                <input
-                    type="text"
-                    placeholder="Search..."
-                    value={searchTerm}
-                    onChange={e => this.handleSearch(e.target.value)}
-                />
-                {data.map(item => (
-                    item instanceof Folder ?
-                        <Folder
-                            key={item.name}
-                            folder={item}
-                            path=""
-                            expandedFolders={expandedFolders}
-                            onToggleFolder={this.handleToggleFolder}
-                            renderFile={file => <Folder file={file} path="" searchTerm={searchTerm} />}
-                        />
-                        :
-                        <File key={item.name} file={item} path="" searchTerm={searchTerm} />
-                ))}
+                <input type='text' placeholder='Search...' value={searchTerm} onChange={this.handleSearch} />
+                {foldersToRender}
             </div>
         );
     }
 }
 
-// Example usage:
-const sampleData = [
-    new Folder('Folder 1', [
-        new File('file1.txt', 'text/plain'),
-        new File('file2.jpg', 'image/jpeg'),
-        new Folder('Subfolder 1', [
-            new File('file3.pdf', 'application/pdf')
-        ])
-    ]),
-    new Folder('Folder 2', [
-        new File('file4.docx', 'application/msword')
-    ])
-];
-
-const myBrowser = <MyBrowser data={sampleData} />;
-
-export default myBrowser;
+export default MyBrowser;
